@@ -1,1 +1,568 @@
 
+# -*- coding: utf-8 -*-
+"""
+Created on Tue Jul 20 14:58:18 2021
+
+@author: Administrator
+"""
+
+# -*- coding: utf-8 -*-
+"""
+Created on Tue Apr 13 14:16:53 2021
+
+@author: Administrator
+"""
+
+import seaborn as sns
+from mailunion import ddcopy_config,ppcopy_config,lot_config,userscore_config as customer_config,t_config
+import numpy as np
+import os 
+import pandas as pd
+import datetime
+import pymysql
+pd.set_option('display.max_columns', None)
+
+os.chdir("E:\Program Files\Anaconda\kapark")
+def create_date(start_date,end_date):
+    date_range=pd.date_range(start=start_date,end=end_date,freq='D')
+    date_dimension=pd.DataFrame(date_range,columns=['date'])
+    date_dimension['year']=date_dimension['date'].dt.year
+    date_dimension['month']=date_dimension['date'].dt.month
+    date_dimension['day']=date_dimension['date'].dt.day
+    date_dimension['id']=date_dimension['year']*10000+date_dimension['month']*100+date_dimension['day']
+    date_dimension['year_month_id']=date_dimension['year']*100+date_dimension['month']
+    date_dimension['dayofweek']=date_dimension['date'].dt.dayofweek
+    date_dimension['day_name']=date_dimension['date'].dt.day_name()
+    date_dimension['dayofyear']=date_dimension['date'].dt.dayofyear
+    date_dimension['quarter']=date_dimension['date'].dt.quarter
+    date_dimension['weekofyear']=date_dimension['date'].dt.isocalendar().week
+    date_dimension['daysinmonth']=date_dimension['date'].dt.days_in_month
+    date_dimension['date']=date_dimension['date'].dt.date
+    return date_dimension
+
+customer_config['database']='customer'
+class mysql_work():
+    def __init__(self,mysql_config):
+        self.config=mysql_config
+ 
+    def updatetable(self,sql):
+        con=self.config
+        db2 = pymysql.connect(**con)
+        cursor2 = db2.cursor()
+        try:        
+            cursor2.execute(sql)          
+            db2.commit()
+        except:            
+            db2.rollback()
+            print(sql)
+        db2.close()
+
+    def my_insert(self,sql,data):
+        con=self.config
+        insert_data = [tuple(x) for x in data.values]
+        db2 = pymysql.connect(**con)
+        cursor2 = db2.cursor()
+        try:        
+            cursor2.executemany(sql,insert_data)          
+            db2.commit()
+        except:            
+            db2.rollback()   
+            print(sql)
+        db2.close()
+            
+    def get_table(self,sql):
+        db = pymysql.connect(**self.config)
+        cursor = db.cursor()
+        
+       
+        cursor.execute(sql)
+        result=cursor.fetchall()
+        
+        db.close()
+        return result
+
+
+
+
+#获取城市表
+sql="""select id,plate,city,province from c.car_city """
+city=pd.DataFrame(list(test.get_table(sql)),columns=['id','city_code','city','province'])
+
+#更新车场表
+pp=mysql_work(ppcopy_config)
+sql="""select * from t._park
+     """
+data=pd.DataFrame(list(pp.get_table(sql)),columns=['park_id','province','city','area','name','address','type','longtitude','latitude',
+                  'label_type','label'])
+
+data[['business','device','manage_model','collaborator']]=data['type'].str.split('|',expand=True).fillna(20)
+data=data.drop(['type'],axis=1)
+
+
+db2 = pymysql.connect(**pptest_config,database='customer')
+cursor2 = db2.cursor()
+sql1="""delete from c._park"""
+cursor2.execute(sql1) 
+db2.commit()
+db2.close()
+sql=""" 
+    insert into c._park
+    (id, province, city, area, name, address, longtitude,
+       latitude, label_type, label, business, device, manage_model,
+       collaborator) 
+    values 
+      (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)"""
+test.my_insert(sql,data)
+
+
+
+date_dimension=create_date('2015-03-01','2021-12-31')
+
+
+date_sql="""insert into c.date
+    (date,year,month,day,id,year_month_id,dayofweek,day_name, dayofyear, quarter, weekofyear, daysinmonth) 
+    values 
+      (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
+    """
+#test.my_insert(date_sql,date_dimension)
+    
+
+
+
+
+
+def myrebuild(date_range):
+    test=mysql_work(customer_config)
+    dd=mysql_work(ddcopy_config)
+    pp=mysql_work(ppcopy_config)
+    t=mysql_work(t_config)
+    
+    #获取城市表
+    sql="""select """
+    city=pd.DataFrame(list(test.get_table(sql)),columns=['id','city_code','city','province'])
+    
+    #更新车场表
+    pp=mysql_work(ppcopy_config)
+    sql="""select fid,
+         """
+    data=pd.DataFrame(list(pp.get_table(sql)),columns=['park_id','province','city','area','name','address','type','longtitude','latitude',
+                      'label_type','label'])
+    
+    data[['business','device','manage_model','collaborator']]=data['type'].str.split('|',expand=True).fillna(20)
+    data=data.drop(['type'],axis=1)
+    
+    
+    db2 = pymysql.connect(**customer_config)
+    cursor2 = db2.cursor()
+    sql1="""delete from c._park"""
+    cursor2.execute(sql1) 
+    db2.commit()
+    db2.close()
+    sql=""" 
+        insert into c._park
+        (id, province, city, area, name, address, longtitude,
+           latitude, label_type, label, business, device, manage_model,
+           collaborator) 
+        values 
+          (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)"""
+    test.my_insert(sql,data)
+    
+    #更新车位表
+    lot=mysql_work(lot_config)
+    date_range1=np.arange(2260,-1,-1)
+    for i in date_range1:
+        print(i)   
+        sql="""select """.format(i)
+        
+        data=pd.DataFrame(list(lot.get_table(sql)),columns=['lot_id','last_modify_date_time','park_id','number','user_id'])
+    
+        if not data.empty:
+            insert_data=data
+            insert_data['last_modify_date_time']=insert_data['last_modify_date_time'].dt.strftime('%Y-%m-%d %H:%M:%S')
+            sql="""insert into c._park_detail
+                (id,create_datetime,park_id,number,user_id) 
+                values 
+                  (%s,%s,%s,%s,%s)
+                  ON duplicate KEY UPDATE create_datetime=values(create_datetime),number=values(number),user_id=values(user_id)"""
+            test.my_insert(sql,insert_data)
+            
+    
+    for i in date_range:
+        print(i)
+        #更新用户表
+        
+        sql="""select   """.format(i)
+
+        data=pd.DataFrame(list(pp.get_table(sql)),columns=['user_id','mobile','birthday','email','type','register_time','source'])
+
+        if not data.empty:
+            data['register_time']=data['register_time'].dt.strftime('%Y-%m-%d %H:%M:%S')
+            
+        sql="""insert into c.users
+            (id,mobile,birthday,email,type,register_time,source) 
+            values 
+              (%s,%s,%s,%s,%s,%s,%s)
+              ON duplicate KEY UPDATE birthday=values(birthday),email=values(email),type=values(type)"""
+        test.my_insert(sql,data)
+       
+    
+       
+        
+        #pp车牌导出
+        sql="""select""".format(i) 
+
+        data=pd.DataFrame(list(pp.get_table(sql)),columns=['plate','user_id','city_code','create_date_time'])
+
+
+        sql="""select """.format(i)
+     
+        dddata=pd.DataFrame(list(t.get_table(sql)),columns=['plate','city_code','create_date_time'])
+
+        
+        data=pd.concat((data,dddata))
+        data['check']=data['plate'].str.contains('[京津沪渝冀豫云辽黑湘皖鲁新苏浙赣鄂桂甘晋蒙陕吉闽贵粤青藏川宁琼使领]',regex=True)
+        data['len']=data['plate'].str.len()
+        data.loc[(data['len']<6)|(data['len']>=9)|~data['check'],'plate']='无牌车'
+        data=data.drop(['check','len'],axis=1)
+        if not data.empty:
+            data['create_date_time']=data['create_date_time'].dt.strftime('%Y-%m-%d %H:%M:%S')
+            
+        
+        data['plate']=data['plate'].str.upper()
+        data=data.drop_duplicates(subset=['plate'],keep='first')
+        
+        ppplate=data.merge(city,how='left',on='city_code')
+        data=ppplate[['id','plate','create_date_time']].fillna(-1)
+        
+        db2 = pymysql.connect(**customer_config)
+        cursor2 = db2.cursor()
+        sql1="""delete from c.cs_tmp"""
+        cursor2.execute(sql1) 
+        db2.commit()
+        db2.close()
+        sql="""insert into c.cs_tmp
+            (city_id,carnumber,create_datetime) 
+            values 
+              (%s,%s,%s)
+             """
+        test.my_insert(sql,data)
+        
+        sql="""insert into c.cs
+           (carnumber,create_datetime,city_id) 
+           select tmp.* from c.cs_tmp tmp
+           left join c.cs c on tmp.carnumber=c.carnumber
+           where c.id is null"""
+        test.updatetable(sql)
+        
+       
+        
+        #导出ddpp订单表
+        sql="""select guid,user_id from 
+        t.table_user tpu  
+            where 
+           create_date_time between
+            date_format(date_sub(now(),interval {0} day),'%Y-%m-%d 00:00:00') and 
+            date_format(date_sub(now(),interval {0} day),'%Y-%m-%d 23:59:59')
+
+          """.format(i)
+        
+        userdata=pd.DataFrame(list(dd.get_table(sql)),columns=['guid','user_id' ])
+
+        sql="""select 
+          """.format(i)
+        
+        data=pd.DataFrame(list(t.get_table(sql)),columns=['park_id','car_number','start_datetime',
+                          'in_datetime','end_datetime','fCarType',
+                          'fOrderPayment','fTotalPayment','guid'])
+  
+        data=data.merge(userdata,how='left',on='guid').fillna(1)
+        data=data.drop_duplicates(subset=['guid'],keep='last')
+        data['lot_id']=1
+        data['owner_id']=1
+        data['fParkDetailEndDateTime']=data['end_datetime']
+        data['order_status']='完成'
+        dddata=data
+        
+        
+        sql="""select
+          """.format(i)
+       
+        data=pd.DataFrame(list(pp.get_table(sql)),columns=['park_id','user_id','lot_id','owner_id','car_number','start_datetime',
+                          'in_datetime','end_datetime','fCarType'
+                          ,'fOrderPayment','fTotalPayment','fScore','order_status','fOverTimeMoney','fParkDetailEndDateTime',
+                          'guid','fUserEarnCount','fBigUserEarnCount','fppEarnCount'])
+       
+        
+        
+        data=pd.concat((data,dddata),ignore_index=True)
+        data=data.fillna(0)
+        data['start_datetime']=pd.to_datetime(data['start_datetime'])
+        if not data.empty:
+            data['startdate_key']=data['start_datetime'].dt.year*10000+data['start_datetime'].dt.month*100+data['start_datetime'].dt.day
+            data['indate_key']=data['in_datetime'].dt.year*10000+data['in_datetime'].dt.month*100+data['in_datetime'].dt.day
+            data['enddate_key']=data['end_datetime'].dt.year*10000+data['end_datetime'].dt.month*100+data['end_datetime'].dt.day
+            
+            for j in ['start_datetime','in_datetime','end_datetime','fParkDetailEndDateTime']:
+                data[j]=data[j].dt.strftime('%Y-%m-%d %H:%M:%S')
+        
+        data['check']=data['car_number'].str.contains('[京津沪渝冀豫云辽黑湘皖鲁新苏浙赣鄂桂甘晋蒙陕吉闽贵粤青藏川宁琼使领]',regex=True)
+        data['len']=data['car_number'].str.len()
+        data.loc[(data['len']<6)|(data['len']>=9)|~data['check'],'car_number']='无牌车'
+        data.loc[(data['len']<6)|(data['len']>=9)|~data['check'],'user_id']=1
+        data=data[data['guid'].str.len()<40]
+        data=data.drop(['check','len'],axis=1)
+        
+        #更新订单临时表
+        db2 = pymysql.connect(**customer_config)
+        cursor2 = db2.cursor()
+        sql1="""delete from c.table_tmp"""
+        cursor2.execute(sql1) 
+        db2.commit()
+        db2.close()
+        
+        
+        insert_tmp_sql="""insert into c.table_tmp
+                (park_id,user_id,lot_id,owner_id,car_number,start_datetime,in_datetime,end_datetime,
+                 fCarType,fOrderPayment,fTotalPayment,fScore,order_status,
+                 fOverTimeMoney,fParkDetailEndDateTime,guid,fUserEarnCount,fBigUserEarnCount,fppEarnCount,
+                 startdate_key,indate_key,enddate_key) 
+                values 
+                  (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
+                """
+        test.my_insert(insert_tmp_sql,data)
+        
+                
+        sql="""update c.table_tmp 
+            set user_id=1
+            where user_id in ( select user_id from (
+            select user_id  from c.table_tmp tmp
+                            left join c.cs c on tmp.car_number=c.carnumber
+            left join t_users u on tmp.user_id=u.id
+                            where user_id !=1
+            and u.id is null) as t)"""
+        test.updatetable(sql)
+        #更新桥接表
+        
+    
+        sql="""insert into c.car_user_bridge  (user_id,car_id,start_datetime,startdate_key,end_datetime,enddate_key,frequency)
+                select user_id,ifnull(c.id,-1) 'car_id',end_datetime 'start_datetime',enddate_key 'startdate_key',end_datetime,enddate_key,1  from c.table_tmp tmp
+                left join c.cs c on tmp.car_number=c.carnumber
+                where user_id !=1
+                on DUPLICATE key update end_datetime=tmp.end_datetime,enddate_key=tmp.enddate_key,frequency=frequency+1;
+                """
+        test.updatetable(sql)
+        sql="""insert into c.car_user_bridge  (user_id,car_id,start_datetime,startdate_key,end_datetime,enddate_key,frequency)
+            select * from (
+            select ifnull(max(cub.user_id),tmp.user_id) 'user_id',ifnull(c.id,-1) 'car_id',tmp.end_datetime 'start_datetime',tmp.enddate_key 'startdate_key',tmp.end_datetime,tmp.enddate_key,1  from c.table_tmp tmp
+            left join c.cs c on tmp.car_number=c.carnumber
+            left join c.car_user_bridge cub on c.id=cub.car_id
+            where tmp.user_id =1
+            and cub.car_id>0
+            group by guid,tmp.end_datetime
+            ) t
+            on DUPLICATE key update end_datetime=t.end_datetime,enddate_key=t.enddate_key,frequency=frequency+1""" 
+        test.updatetable(sql)
+        #插入订单表
+        sql="""insert into c.table (park_id,user_id,owner_id,lot_id,car_id,start_datetime,in_datetime,end_datetime,startdate_key,indate_key,enddate_key,fCarType,fOrderPayment,fTotalPayment,fScore,order_status,fOverTimeMoney,
+            fParkDetailEndDateTime,guid,fUserEarnCount,fBigUserEarnCount,fppEarnCount) 
+            select park_id,user_id,owner_id,lot_id,ifnull(c.id,-1) 'car_id',start_datetime,in_datetime,end_datetime,startdate_key,indate_key,enddate_key,fCarType,GREATEST(0,fOrderPayment) fOrderPayment,fTotalPayment,fScore,order_status,fOverTimeMoney,
+            fParkDetailEndDateTime,guid,fUserEarnCount,fBigUserEarnCount,fppEarnCount from c.table_tmp tmp
+            left join c.cs c on tmp.car_number=c.carnumber
+            where user_id !=1
+            union all
+            select park_id,ifnull(max(cub.user_id),tmp.user_id) 'user_id',owner_id,lot_id,ifnull(c.id,-1) 'car_id',tmp.start_datetime,in_datetime,tmp.end_datetime,tmp.startdate_key,
+            indate_key,tmp.enddate_key,fCarType,GREATEST(0,fOrderPayment) fOrderPayment,fTotalPayment,fScore,order_status,fOverTimeMoney,
+                fParkDetailEndDateTime,guid,fUserEarnCount,fBigUserEarnCount,fppEarnCount from c.table_tmp tmp
+                left join c.cs c on tmp.car_number=c.carnumber
+            left join c.car_user_bridge cub on c.id=cub.car_id
+            where tmp.user_id =1
+            group by guid,tmp.end_datetime
+        """
+        test.updatetable(sql)
+        
+         #更新分享表
+
+        sql="""select  """.format(i)
+        data=pd.DataFrame(list(pp.get_table(sql)),columns=['park_id','user_id','lot_id','fTimes','share_time','parking_time','create_time'])
+        if not data.empty:
+                    data['create_time']=data['create_time'].dt.year*10000+data['create_time'].dt.month*100+data['create_time'].dt.day
+        for j in data.columns:
+            data[j]=data[j].astype('str')
+        
+        
+        sql="""insert into c.share_lot
+            (park_id,user_id,lot_id,number,share_time,parking_time,createdate_key) 
+            values 
+              (%s,%s,%s,%s,%s,%s,%s)
+            """
+        test.my_insert(sql,data)
+
+    
+def update_midtable(date_range):
+    test=mysql_work(customer_config)
+    dd=mysql_work(ddcopy_config)
+    pp=mysql_work(ppcopy_config)
+  
+    for i in date_range:
+        print(i)
+        sql="""select 
+            """.format(i)
+        
+        t=pd.DataFrame(list(pp.get_table(sql)),columns=['createdate_key','mobile','behavior_id'])
+        sql="""select 
+         """.format(i)
+        
+        data=pd.DataFrame(list(dd.get_table(sql)),columns=['createdate_key','mobile','behavior_id'])
+        data=pd.concat((t,data),ignore_index=True)
+        if not data.empty:
+            data['createdate_key']=data['createdate_key'].dt.year*10000+data['createdate_key'].dt.month*100+data['createdate_key'].dt.day
+        db2 = pymysql.connect(**customer_config)
+        cursor2 = db2.cursor()
+        sql1="""delete from c.local_user_tmp"""
+        cursor2.execute(sql1) 
+        db2.commit()
+        db2.close()
+        
+        insert_sql="""insert into c.local_user_tmp
+                (createdate_key,mobile,behavior_id) 
+                values 
+                  (%s,%s,%s)
+                """
+        test.my_insert(insert_sql,data)
+        
+        #更新用户积分明细表
+        sql="""insert into c.u (user_id,number,createdate_key,behavior_id)
+            select u.id 'user_id',1 as 'number',l.createdate_key,l.behavior_id from c.local_user_tmp l
+            inner join c.users u on l.mobile=u.mobile
+						left join c.user_score_behavior usb on u.id=usb.user_id and l.behavior_id=usb.behavior_id
+						where usb.id is null
+					
+            union
+						select x.* from (
+            select user_id,1 as 'number',createdate_key, 3 as 'behavior_id' from c.share_lot s 
+            where createdate_key between date_format(date_sub(now(),interval {0}  day),'%Y%m%d') and date_format(date_sub(now(),interval {0}  day),'%Y%m%d')
+            group by user_id) x left join c.user_score_behavior usb on x.user_id=usb.user_id and x.behavior_id=usb.behavior_id
+						where usb.id is null
+            union
+            select user_id,count(*) as 'number',enddate_key 'createdate_key',5 as 'beahvior_id' from c.table
+            where enddate_key between date_format(date_sub(now(),interval {0} day),'%Y%m%d') and date_format(date_sub(now(),interval {0} day),'%Y%m%d')          
+            and in_datetime !=end_datetime
+            and user_id>1
+            group by user_id
+            union
+            select user_id,count(*) as 'number',enddate_key 'createdate_key',8 as 'beahvior_id' from c.table
+            where enddate_key between date_format(date_sub(now(),interval {0} day),'%Y%m%d') and date_format(date_sub(now(),interval {0} day),'%Y%m%d')
+            and in_datetime !=end_datetime
+            and fTotalPayment>0
+            and user_id>1
+            group by user_id
+            union
+            select user_id, count(*) as 'number',enddate_key 'createdate_key',10 as 'beahvior_id' from c.table
+            where enddate_key between date_format(date_sub(now(),interval {0} day),'%Y%m%d') and date_format(date_sub(now(),interval {0} day),'%Y%m%d')
+            and in_datetime !=end_datetime
+            and  UNIX_TIMESTAMP(in_datetime)-UNIX_TIMESTAMP(start_datetime)>600 
+            and user_id>1
+            group by user_id
+            
+            union
+            select user_id, count(*) as 'number',enddate_key 'createdate_key',6 as 'beahvior_id' from c.table
+            where enddate_key between date_format(date_sub(now(),interval {0} day),'%Y%m%d') and date_format(date_sub(now(),interval {0} day),'%Y%m%d')
+            and in_datetime !=end_datetime
+            and  UNIX_TIMESTAMP(end_datetime)-UNIX_TIMESTAMP(fParkDetailEndDateTime)>0 
+            and user_id>1
+            group by user_id
+ 
+ 
+                    """.format(i)
+        test.updatetable(sql)
+          
+        sql="""select 
+             """.format(i)
+        data=pd.DataFrame(list(pp.get_table(sql)),columns=['createdate_key','user_id','number','behavior_id'])
+        insert_tmp_sql="""insert into c.user_score_behavior (createdate_key,user_id,number,behavior_id) 
+                        values 
+                          (%s,%s,%s,%s)
+                        """
+        test.my_insert(insert_tmp_sql,data)
+        
+        #更新生命周期表
+        sql="""insert into c.user_life (user_id,create_datetime,startdate_key,enddate_key,start_park_id,end_park_id,frequency)
+        select * from (
+        select user_id,now() as create_date,enddate_key as startdate_key,enddate_key,park_id as start_park,park_id as end_park,count(*) number from c.table 
+        where enddate_key between date_format(date_sub(now(),interval {0} day),'%Y%m%d') and 
+        date_format(date_sub(now(),interval {0} day),'%Y%m%d')
+        and user_id>1
+        group by user_id) t
+        ON duplicate KEY update enddate_key=t.enddate_key,end_park_id=t.end_park,frequency=frequency+t.number
+         """.format(i)      
+        test.updatetable(sql)  
+        
+        #更新用户总行为表
+        sql="""insert into c.users_action_count  (user_id,createdate_key)
+                select id 'user_id',date_format(register_time,'%Y%m%d') 'createdate_key'  from c.users
+                where register_time between date_format(date_sub(now(),interval {0} day),'%Y-%m-%d 00:00:00') and 
+                            date_format(date_sub(now(),interval {0} day),'%Y-%m-%d 23:59:59') 
+                     """.format(i)      
+        test.updatetable(sql) 
+        sql="""
+            update c.users_action_count u inner join (select x.user_id,x.last_modify_key,x.privateuser,x.localuser,x.shareuser,x.overtime_count,x.open_freepay,x.charge_count,
+            x.prebook_count,x.pay_count,x.wrongparking_count,
+            ifnull(y.parking_count,0) 'parking_count',ifnull(y.tmp_parking_count,0) 'tmp_parking_count',ifnull(y.pp_parking_count,0) 'pp_parking_count',
+            ifnull(z.share_time,0) 'share_time',ifnull(z.used_time,0) 'used_time' from (
+            select user_id,createdate_key 'last_modify_key',sum(case when behavior_id=1 then 1 else 0 end) 'privateuser',  
+            sum(case when behavior_id=2 then 1 else 0 end) 'localuser',
+            sum(case when behavior_id=3 then 1 else 0 end) 'shareuser',
+            sum(case when behavior_id=4 then 1 else 0 end) 'open_freepay',
+            sum(case when behavior_id=9 then number else 0 end) 'charge_count',
+            sum(case when behavior_id=10 then number else 0 end) 'prebook_count',
+            sum(case when behavior_id=6 then number else 0 end) 'overtime_count',
+								sum(case when behavior_id=8 then number else 0 end) 'pay_count',
+								sum(case when behavior_id=12 then number else 0 end) 'wrongparking_count'
+            from c.user_score_behavior
+            where createdate_key =date_format(date_sub(now(),interval {0} day),'%Y%m%d')
+            group by user_id) 
+            as x left join (
+            select user_id,count(*) as 'parking_count',sum(case when fCarType=1 then 1 else 0 end) 'tmp_parking_count',
+            sum(case when fCarType=2 then 1 else 0 end) 'pp_parking_count'
+            from c.table
+            where enddate_key between date_format(date_sub(now(),interval {0} day),'%Y%m%d') 
+            and date_format(date_sub(now(),interval {0} day),'%Y%m%d')          
+            and in_datetime !=end_datetime
+            and user_id>1
+            group by user_id
+            ) y on x.user_id =y.user_id
+            left join (
+            select user_id,sum(share_time) share_time,sum(parking_time) used_time from c.share_lot ts 
+            where createdate_key =date_format(date_sub(now(),interval {0} day),'%Y%m%d')
+            group by user_id) as z on x.user_id=z.user_id
+            
+            
+            ) as b on u.user_id=b.user_id
+            set u.charge_count=u.charge_count+b.charge_count,u.last_modify_key=b.last_modify_key,u.localuser=u.localuser+b.localuser,
+            u.privateuser=u.privateuser+b.privateuser,u.shareuser=u.shareuser+b.shareuser,u.pp_parking_count=u.pp_parking_count+b.pp_parking_count,
+            u.parking_count=u.parking_count+b.parking_count,
+            u.tmp_parking_count=u.tmp_parking_count+b.tmp_parking_count,
+            u.open_freepay=b.open_freepay+u.open_freepay,u.overtime_count=u.overtime_count+b.overtime_count,
+            u.prebook_count=u.prebook_count+b.prebook_count,u.sharetime_count=u.sharetime_count+b.share_time,
+            u.sharetime_used_count=u.sharetime_used_count+b.used_time,
+								u.pay_count=u.pay_count+b.pay_count,u.not_inplace_count=u.not_inplace_count+b.wrongparking_count
+            
+             
+             """.format(i)      
+        test.updatetable(sql)          
+
+
+
+ 
+    #2224 
+date_range=np.arange(2290,0,-1)
+#myrebuild(date_range)
+
+update_midtable(date_range)
+
+
+#delete_range=np.arange(1,11441160,20000)
+#for i in delete_range:
+ #   sql="""delete from c.user_score_behavior
+  #      where id BETWEEN {0} and  {0}+20000""".format(i)
+   # test.updatetable(sql)
