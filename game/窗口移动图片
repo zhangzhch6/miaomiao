@@ -1,0 +1,60 @@
+import numpy as np
+import os
+import datetime
+import pygame
+from PIL import Image 
+import mreport as mc
+import cv2
+os.chdir("E:\Program Files\Anaconda\kapark")
+
+#data=m.foshanweek()
+
+background_image_filename = '.\\picture\\sushiplate.jpg'
+mouse_image_filename = '.\\picture\\fugu.jpg'
+
+pygame.init()
+
+screen_width = 640
+screen_high = 480
+
+screen = pygame.display.set_mode((screen_width, screen_high))
+screen_rect = screen.get_rect()
+
+pygame.display.set_caption("Moving Fish")
+
+
+background_image = pygame.image.load(background_image_filename).convert()
+mouse_image = pygame.image.load(mouse_image_filename).convert_alpha()
+
+mouse_image_rect = mouse_image.get_rect()
+
+clock = pygame.time.Clock()
+
+
+
+
+
+#获取鼠标位置
+for i in range(0,200):
+#x, y = pygame.mouse.get_pos()
+    screen.blit(background_image, (0, 0))
+    pygame.time.wait(10)
+    x=int(screen_width/2)
+    y=int(screen_high/4)+i
+
+    mouse_image_rect.center = (x, y)
+
+    #设置图片移动边界
+    if mouse_image_rect.left < 0:
+        mouse_image_rect.left = 0
+    if mouse_image_rect.right > screen_rect.right:
+        mouse_image_rect.right = screen_rect.right
+    if mouse_image_rect.top < 0:
+        mouse_image_rect.top = 0
+    if mouse_image_rect.bottom > screen_rect.bottom:
+        mouse_image_rect.bottom = screen_rect.bottom
+
+    screen.blit(mouse_image, mouse_image_rect)
+
+    pygame.display.update()
+pygame.quit()
