@@ -17,7 +17,7 @@ def pandas_analysis():
     
     
     tmp=tmp[['fName','variable','fDate','percent']].set_index(['fName','variable','fDate']).unstack(-1).reset_index()
-    tmp.to_excel('岭南天地占比.xlsx')
+    tmp.to_excel('**占比.xlsx')
     
     today=datetime.date.today()
     tmp=pd.DataFrame()
@@ -31,7 +31,7 @@ def pandas_analysis():
     tmp=pd.melt(tmp, id_vars=['fName','fDate'], value_vars=['totalpayment',  'tmp', '当月月保总收入','kp_payment'])
     tmp['value']=tmp['value'].astype('float')
     tmp=tmp[['fName','variable','fDate','value']].set_index(['fName','variable','fDate']).unstack(-1).reset_index()
-    tmp.to_excel('岭南天地月收入.xlsx')
+    tmp.to_excel('**月收入.xlsx')
     
     tmp=pd.DataFrame()
     for i in [**]:
@@ -41,7 +41,7 @@ def pandas_analysis():
         data1['month']=data1['fDate'].apply(lambda x:x.strftime('%Y-%m'))
         tmp=pd.concat((tmp,data1))
     d1=tmp.groupby(['fPark','fType','month'])['fPlate'].count().unstack(-1).reset_index()
-    d1.to_excel('岭南天地月车流量.xlsx')
+    d1.to_excel('**月车流量.xlsx')
     #日期参数要变
     data3=m.bus(start='2021-05-01 00:00:00',end='2021-06-30 23:59:59')
     tmp=data3
@@ -49,4 +49,4 @@ def pandas_analysis():
     tmp['value']=tmp['value'].astype('float')
     tmp=tmp[['fPark','variable','fDate','value']].set_index(['fPark','variable','fDate']).unstack(-1).reset_index()
     
-    tmp.to_excel('岭南天地大巴月收入.xlsx')
+    tmp.to_excel('****月收入.xlsx')
