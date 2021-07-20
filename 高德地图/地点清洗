@@ -1,0 +1,202 @@
+
+import matplotlib.pyplot as plt
+import time
+import numpy as np
+from bs4 import BeautifulSoup
+import json
+import requests
+import pymysql
+from mreport import kptest_config,kpcopy_config
+import datetime
+from pymongo import MongoClient
+import pandas as pd
+import os
+import jieba
+from haversine import haversine_vector, Unit
+import seaborn as sns
+
+
+
+
+        
+
+#字段，id，车场名，地址，gps，有无校对，创建时间，车场类型，来源
+#高德百度地图坐标不一样
+#kk自营车场导出
+
+tencent=pd.read_excel('腾讯地图停车场.xlsx')
+gaode=pd.read_excel('高德地图数据.xlsx')
+baidu=pd.read_excel('百度地图停车场.xlsx')
+kk=pd.read_excel('车场.xlsx')
+
+
+gaode=gaode.drop('type',axis=1)
+gaode=gaode.rename({'parking_type':'type'},axis=1)
+gaode['check']=0
+baidu['type']='未知'
+tencent['check']=0
+#kk['name']=kk['name'].astype('str')
+
+
+def nearest(data1,data2):
+    data=pd.DataFrame()
+    for k in ['从化区', '南沙区', '增城区', '天河区', '海珠区', '番禺区', '白云区', '花都区', '荔湾区',
+       '越秀区', '黄埔区']:
+        d1=data1.loc[data1['adname']==k,['id','name','adname','longitude','latitude']]
+        d2=data2.loc[data2['adname']==k,['id','name','adname','longitude','latitude']]
+        d1['key']=1
+        d2['key']=1
+      
+        p=d1.merge(d2,how='left',on=['key','adname'])
+        p=p[p['id_x']!=p['id_y']]
+        p['distance']=haversine_vector(p[['latitude_x','longitude_x']].values, 
+                              p[['latitude_y','longitude_y']].values, Unit.KILOMETERS)
+        p['distance']=p['distance'].fillna(9999)
+        p['min']=p.groupby(['id_x','name_x'])['distance'].transform('min')
+        p=p[p['min']==p['distance']]
+        data=pd.concat((data,p))
+    return data
+
+
+def near(data1,data2,distance=0.05):
+    data=pd.DataFrame()
+    for k in ['从化区', '南沙区', '增城区', '天河区', '海珠区', '番禺区', '白云区', '花都区', '荔湾区',
+       '越秀区', '黄埔区']:
+        d1=data1.loc[data1['adname']==k,['id','name','adname','longitude','latitude']]
+        d2=data2.loc[data2['adname']==k,['id','name','adname','longitude','latitude']]
+        d1['key']=1
+        d2['key']=1
+      
+        p=d1.merge(d2,how='left',on=['key','adname'])
+        p=p[p['id_x']!=p['id_y']]
+        p['distance']=haversine_vector(p[['latitude_x','longitude_x']].values, 
+                              p[['latitude_y','longitude_y']].values, Unit.KILOMETERS)
+        p['distance']=p['distance'].fillna(0)
+        
+        p=p[(p['distance']<=distance)&(~p['id_y'].isnull())]
+        data=pd.concat((data,p))
+        
+        
+    data['entrance']=data['name_x'].str.contains('[出入]口',regex=True)
+    data['name']=data['name_x']
+    dictionary={'停车位':'停车场','路边':'路侧','地下':'地上','地面':'地上',
+                '广东省':'','广州市':'','海珠区':'','广州':'','广东':'','商务酒店':'商务中心','商务大厦':'商务中心','商业大厦':'商业中心'}
+    for key,values in dictionary.items():
+
+        data['name_x']=data['name_x'].str.replace(key,values)
+        data['name_y']=data['name_y'].str.replace(key,values)
+        
+    data['name_x']=data['name_x'].str.replace('[\(\)\-\·]|出入口|出口|入口','',regex=True)
+    data['name_y']=data['name_y'].str.replace('[\(\)\-\·]|出入口|出口|入口','',regex=True)
+    
+    data=data.sort_values('entrance')
+    
+    data['name_x']=data['name_x'].apply(lambda x:jieba.lcut(x))
+    data['name_y']=data['name_y'].apply(lambda x:jieba.lcut(x))
+    #data['name_x']=data['name_x'].apply(lambda x:set(x))
+    #data['name_y']=data['name_y'].apply(lambda x:set(x))
+    data['sim']=data.apply(lambda x:
+                                len(set(x['name_x'])&set(x['name_y']))/len(set(x['name_x'])|set(x['name_y'])),axis=1)
+
+    return data
+
+
+def mydropnull(data):
+    test=data
+    test=test[test['name']!='停车场']
+    test['newtype']=test['type'].fillna('未知').apply(lambda x: '保留' if '路边' in x or '地面' in x else '')
+    test['newname']=test['name']+test['newtype']
+    test['newname']=test['newname'].str.replace('[\(\)\-\·]|出入口|出口|入口|停车场|地上|地下','',regex=True)
+    test=test[test['newname']!='']
+    test=test.drop(['newtype','newname'],axis=1)
+    dictionary={'广东省':'','广州市':'','海珠区':'','-':'',
+                '荔湾区':'','越秀区':'','天河区':'','白云区':'','黄埔区':'','番禺区':'','花都区':'','南沙区':'','从化区':'','增城区':''}
+    
+    for key,values in dictionary.items():
+
+        test['address']=test['address'].str.replace(key,values)
+    test=test[~test['address'].isin(['[]',''])&~test['address'].isnull()]
+    test=test[~test['name'].str.contains('出口|单车',regex=True)]
+    test=test[test['address'].str.len()>=5]
+    test=test[test['address'].str.contains('[0-9]',regex=True)]
+    return test
+
+def auto_drop(data,distance=0.05):
+    df=data[data['distance']<=distance]
+    search=data.loc[data['distance']<=distance,'id_x']
+    gdsefdrop=[]
+    for i in search:
+        if i in df['id_x'].values:
+            gdsefdrop.append(i)
+        
+            df=df[(df['id_x']!=i)&(df['id_y']!=i)]
+            
+    return gdsefdrop
+
+
+
+#test=gaode_self_near[gaode_self_near['score']<=0.1]
+
+
+def my_drop(data1,kk,d=0.1):
+    data=mydropnull(data1)
+
+    data_self_near=near(data,data,distance=0.25)
+    data_self_near['score']=data_self_near.apply(lambda x:x['distance']*((1/max(x['sim'],0.3)**2)-1/(x['sim']+0.1)),axis=1)
+    data_self_near=data_self_near[data_self_near['score']<=0.1]
+    data_sim_index=auto_drop(data_self_near,distance=1)
+    data=data[~data['id'].isin(data_sim_index)]
+    
+    datakp=near(data1,kk,distance=0.3)
+    datakp['score']=datakp.apply(lambda x:x['distance']*((1/max(x['sim'],0.3)**2)-1),axis=1)
+    datakp=datakp[datakp['score']<=d]
+    datakp_sim_index=datakp['id_x']
+    data=data[~data['id'].isin(datakp_sim_index)]
+    
+    return data
+
+kk['address']=kk['address'].str.replace('广东省|广州市|海珠区','',regex=True)
+tencent['id']=tencent['id'].astype('str')
+gaode=my_drop(gaode,kk,d=0.1)
+
+kk=pd.concat((kk,gaode))
+
+baidu=my_drop(baidu,kk,d=0.15)
+
+kk=pd.concat((kk,baidu))
+
+tencent=my_drop(tencent,kk,d=0.1)
+
+data=pd.concat((kk,tencent))
+
+data=data[data['longitude']>0]
+
+#氚云重复地址不能删除
+data1=data[data['from'].isin(['氚云','自营'])]
+data2=data[~data['from'].isin(['氚云','自营'])]
+data2=data2.drop_duplicates(subset=['address'],keep='first')
+data2=data2[~data2['address'].isin(data1['address'].unique())]
+data=pd.concat((data1,data2))
+del data1,data2
+
+
+data=pd.read_excel('高德百度地图整合.xlsx')
+kk=kk.drop(['Unnamed: 0'],axis=1)
+
+
+data.to_excel('高德百度腾讯地图整合2.0.xlsx')
+
+jieba.lcut('邦华环球贸易中心地下停车场')
+
+jieba.lcut('邦华贸易中心地下停车库')
+
+string="珠江顺景商港地面停车场"
+jieba.lcut(string,cut_all=True)
+
+jieba.lcut(string,cut_all=False)
+b=jieba.lcut('珠江帝景华苑地面')
+[i for i in jieba.cut_for_search('盈丰商务大厦停车场(出入口)')]
+haversine_vector([23.070578,113.276671], [23.07022759,113.2769697], Unit.KILOMETERS)
+
+
+
