@@ -1,0 +1,52 @@
+import pandas as pd
+
+def pandas_analysis():
+    
+    data=pd.DataFrame()
+    for i in [**]:
+        result=m.kcdata([i])
+        data=pd.concat((data,result))
+    data['otherpayment']=data['other_payment']+data['wallet_payment']+data['son_payment']
+    tmp=data.loc[:,['fName','fDate','alipay_payment','buniness_API_payment','otherpayment','wechat_payment','cash_payment']]
+    tmp=pd.melt(tmp, id_vars=['fName','fDate'], value_vars=['alipay_payment',
+            'buniness_API_payment','otherpayment','wechat_payment','cash_payment'])
+    tmp['value']=tmp['value'].astype('float')
+    tmp['total']=tmp.groupby(['fName','fDate'])['value'].transform('sum')
+    tmp['percent']=np.round(tmp['value']/tmp['total'],3)
+    
+    
+    
+    tmp=tmp[['fName','variable','fDate','percent']].set_index(['fName','variable','fDate']).unstack(-1).reset_index()
+    tmp.to_excel('岭南天地占比.xlsx')
+    
+    today=datetime.date.today()
+    tmp=pd.DataFrame()
+    for i in [**]:
+        result=m.kcdata([i],start=[today.replace(day=1)-relativedelta(months=1),today.replace(day=1)-relativedelta(months=2)],
+               end=[today.replace(day=1)-datetime.timedelta(days=1),
+                    today.replace(day=1)-datetime.timedelta(days=1)-relativedelta(months=1)])
+        paydata,paytimes,discount=m.paydata(result,i=i)
+        tmp=pd.concat((tmp,paydata))
+    tmp=tmp[['fName','fDate','totalpayment',  'tmp', '当月月保总收入','kp_payment']]
+    tmp=pd.melt(tmp, id_vars=['fName','fDate'], value_vars=['totalpayment',  'tmp', '当月月保总收入','kp_payment'])
+    tmp['value']=tmp['value'].astype('float')
+    tmp=tmp[['fName','variable','fDate','value']].set_index(['fName','variable','fDate']).unstack(-1).reset_index()
+    tmp.to_excel('岭南天地月收入.xlsx')
+    
+    tmp=pd.DataFrame()
+    for i in [**]:
+        data1=m.total_flow([i],start=[today.replace(day=1)-relativedelta(months=2)],
+                       end=[today.replace(day=1)-datetime.timedelta(days=1)])
+        data1.loc[data1['fType']=='来访','fType']='kp'
+        data1['month']=data1['fDate'].apply(lambda x:x.strftime('%Y-%m'))
+        tmp=pd.concat((tmp,data1))
+    d1=tmp.groupby(['fPark','fType','month'])['fPlate'].count().unstack(-1).reset_index()
+    d1.to_excel('岭南天地月车流量.xlsx')
+    #日期参数要变
+    data3=m.bus(start='2021-05-01 00:00:00',end='2021-06-30 23:59:59')
+    tmp=data3
+    tmp=pd.melt(tmp, id_vars=['fPark','fDate'], value_vars=[ 'fMoney','fTimes'])
+    tmp['value']=tmp['value'].astype('float')
+    tmp=tmp[['fPark','variable','fDate','value']].set_index(['fPark','variable','fDate']).unstack(-1).reset_index()
+    
+    tmp.to_excel('岭南天地大巴月收入.xlsx')
