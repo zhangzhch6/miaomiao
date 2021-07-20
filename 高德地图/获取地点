@@ -1,0 +1,419 @@
+# -*- coding: utf-8 -*-
+"""
+Created on Wed Apr 15 14:57:34 2020
+
+@author: Administrator
+"""
+
+from bs4 import BeautifulSoup
+import json
+import time
+import datetime
+import requests
+import re
+import numpy as np
+import pandas as pd
+import os 
+import base64
+pd.set_option('display.max_columns', None)
+os.chdir("E:\Program Files\Anaconda\test")
+
+
+
+
+
+typelist=['150903','150904','150905','150906']
+
+#百度ak  
+#key''
+mkey=''
+
+#荔湾区	440103
+#越秀区	440104
+#海珠区	440105
+#天河区	440106
+#白云区	440111
+#黄埔区	440112
+#番禺区	440113
+#花都区	440114
+#南沙区	440115
+#从化区	440117
+#增城区	440118
+
+
+def poly(area='海珠区',key=mkey):
+    url="""https://restapi.amap.com/v3/config/district"""
+    payload = {'key':key,
+               'keywords':area , 
+               'subdistrict': 1,
+               'extensions':'all'
+               }
+    r = requests.get(url, params=payload)
+    table=json.loads(r.content)
+    poly=table['districts'][0]['polyline']
+    c=pd.DataFrame([i.split(',') for i in poly.split(";")],columns=['long','lati'])
+    for i in c.columns:
+        c[i]=c[i].astype('float32')
+    
+    poly=c.describe().T[['min','max']]
+    return poly
+
+def location_range(data,resolution=0.02,l_resolution=0.05):
+
+    long=data.loc['long']
+    lati=data.loc['lati']
+    long_range=np.arange(long['min'],long['max'],resolution)
+    if long['max'] not in long_range:
+        long_range=np.append(long_range,long['max'])
+    lati_range=np.arange(lati['min'],lati['max'],l_resolution)
+    if lati['max'] not in lati_range:
+        lati_range=np.append(lati_range,lati['max'])
+    return long_range,lati_range
+
+def get_rect(long_range,lati_range,mode='高德'):
+    
+    location=[]
+    if mode=='高德':
+        for i in range(len(long_range)-1):
+            for j in range(len(lati_range)-1):
+                location.append("{0:6f},{1:6f}|{2:6f},{3:6f}".format(long_range[i],lati_range[j],
+                                long_range[i+1],lati_range[j+1]))
+        
+    if mode=='百度':
+         for i in range(len(long_range)-1):
+            for j in range(len(lati_range)-1):
+                location.append("{0:6f},{1:6f},{2:6f},{3:6f}".format(lati_range[j],long_range[i],
+                                lati_range[j+1],long_range[i+1]))
+    return location
+
+#腾讯地图
+tecentkey='***'
+url='https://apis.map.qq.com/ws/place/v1/search'
+'荔湾区','越秀区','海珠区','天河区','白云区','黄埔区','番禺区','花都区','南沙区',
+for a in ['从化区','增城区']:
+    myarea=a
+
+    polyline=poly(myarea)
+    
+    long_range,lati_range=location_range(data=polyline,resolution=0.01,l_resolution=0.01)
+    location=get_rect(long_range,lati_range,mode='百度')
+    
+    
+    data_list=[]
+    for k in location:
+        time.sleep(1)
+        payload = {'key':tecentkey,
+                   'keyword':'停车场' ,
+                   'boundary':'rectangle({0})'.format(k),
+                   'page_index':1,
+                   'page_size':20
+                   }
+        r = requests.get(url, params=payload)
+        table=json.loads(r.content)
+        
+        
+        
+        
+        for i in range(0,int(np.ceil(int(table['count'])/20))):
+                time.sleep(0.5)
+                pages=i+1
+                payload = {'key':tecentkey,
+                   'keyword':'停车场' ,
+                   'boundary':'rectangle({0})'.format(k),
+                   'page_index':pages,
+                   'page_size':20
+                   }
+                
+                r = requests.get(url, params=payload)
+                print(pages)
+                t=json.loads(r.content)
+                data_list.extend(t['data'])
+        
+                        
+    
+    data=pd.DataFrame(data_list)
+    
+    data['timestamp']=datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+    data['pname']=data['ad_info'].apply(lambda x:x['province'])
+    data['cityname']=data['ad_info'].apply(lambda x:x['city'])
+    data['adname']=data['ad_info'].apply(lambda x:x['district'])
+    data=data[data['adname']==myarea]
+    data['longitude']=data['location'].apply(lambda x:x['lng'])
+    data['latitude']=data['location'].apply(lambda x:x['lat'])
+    for i in ['longitude','latitude']:
+        data[i]=data[i].astype('float')
+    data=data.drop_duplicates(['id'])
+    data['gps']=data.apply(lambda x:{'latitude':x['latitude'],'longitude':x['longitude']},axis=1)
+    data['level']=30
+    data['from']='腾讯'
+    data['type']='未知'
+    data=data.drop(['tel','category','location','ad_info'],axis=1)
+    data=data.rename({ 'title':'name'},axis=1)
+    data.to_excel('腾讯地图{0}停车场.xlsx'.format(myarea))
+
+
+for a in ['荔湾区','越秀区','海珠区','天河区','白云区','黄埔区','番禺区','花都区','南沙区','从化区','增城区']:
+    myarea=a
+
+    bkey='***'
+    url='http://api.map.baidu.com/place/v2/search'
+    
+    payload = {'query':'停车场',
+                   #'tag':'停车场' ,
+                   'region': myarea,
+                   'output':'json',
+                   'ak':bkey,
+                   'page_size':10,
+                   'page_num':1
+                   }
+    r = requests.get(url,params=payload)
+    table=json.loads(r.content)
+    
+    polyline=poly(myarea)
+    url='http://api.map.baidu.com/geoconv/v1/'
+    payload = {'coords':'{a[0]},{a[1]};{b[0]},{b[1]}'.format(a=polyline['min'],b=polyline['max']),
+                   'from': 3,
+                   'to':5,
+                   'output':'json',
+                   'ak':bkey 
+                   
+                   }
+    r = requests.get(url, params=payload)
+    table=json.loads(r.content)
+    gps=table['result']
+    polyline=pd.DataFrame(gps).rename({'x':'long','y':'lati'},axis=1)
+    polyline=polyline.rename({0:'min',1:'max'}).T
+    long_range,lati_range=location_range(data=polyline,resolution=0.02,l_resolution=0.02)
+    location=get_rect(long_range,lati_range,mode='百度')
+    
+    #百度矩形检索
+    data_list=[]
+    
+    url='http://api.map.baidu.com/place/v2/search'
+    for k in location: 
+        payload = {'query':'停车场',
+                   'bounds':k ,
+                   'region': myarea,
+                   'ret_coordtype':'gcj02ll',
+                   'output':'json',
+                   'ak':bkey,
+                   'page_size':20,
+                   'page_num':1
+                       }
+        r = requests.get(url,params=payload)
+        table=json.loads(r.content)
+        print(table['total'])
+        for i in range(0,int(np.ceil(int(table['total'])/20))):
+                        time.sleep(np.random.random())
+                        pages=i+1
+                        payload = {'query':'停车场',
+                                   'bounds':k ,
+                                   'region': myarea,
+                                   'ret_coordtype':'gcj02ll',
+                                   'scope':2,
+                                   'output':'json',
+                                   'ak':bkey,
+                                   'page_size':20,
+                                   'page_num':pages
+                                       }
+                        r = requests.get(url, params=payload)
+                        t=json.loads(r.content)
+                        data_list.extend(t['results'])
+    
+    data=pd.DataFrame(data_list)
+    data=data[data['area']==myarea]
+    data['timestamp']=datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+    data=data.rename({'uid':'id','province':'pname', 'city':'cityname', 'area':'adname'},axis=1)
+    data['longitude']=data['location'].apply(lambda x:x['lng'])
+    data['latitude']=data['location'].apply(lambda x:x['lat'])
+    for i in ['longitude','latitude']:
+        data[i]=data[i].astype('float')
+    data=data.drop_duplicates(['id'])
+    data['gps']=data.apply(lambda x:{'latitude':x['latitude'],'longitude':x['longitude']},axis=1)
+    data['level']=30
+    data.to_excel('百度地图{0}停车场.xlsx'.format(myarea))
+
+typelist=[150900,150903,150904,150905,150906]
+
+for a in ['荔湾区','越秀区','海珠区','天河区','白云区','黄埔区','番禺区','花都区','南沙区','从化区','增城区']:
+    myarea=a
+    polyline=poly(myarea)
+
+    long_range,lati_range=location_range(data=polyline,resolution=0.02,l_resolution=0.02)
+    
+    
+    location=get_rect(long_range,lati_range,mode='高德')
+
+    #矩形搜索
+    
+    data_list=[]
+    for j in typelist:
+        for k in location: 
+            url="""https://restapi.amap.com/v3/place/polygon"""
+            payload = {'key':mkey,
+                       'keywords': '', 
+                       'polygon': k,
+                       'types': j,
+                       'page':'1',
+                       'extensions':'all'
+                       }
+            r = requests.get(url, params=payload)
+            table=json.loads(r.content)
+            print(table['count'])
+        
+            for i in range(0,int(np.ceil(int(table['count'])/20))):
+                time.sleep(np.random.random())
+                pages=i+1
+                payload = {'key':mkey,
+                       'keywords': '', 
+                       'polygon': k,
+                       'types': j,
+                       'page':pages,
+                       'extensions':'all'
+                       }
+                r = requests.get(url, params=payload)
+                t=json.loads(r.content)
+                data_list.extend(t['pois'])
+
+    data=pd.DataFrame(data_list)
+
+
+    data=data[data['adname']==myarea]
+    data=data[['id','parent', 'name', 'type','address','parking_type','business_area', 'location', 'tel','navi_poiid','timestamp',
+               'biz_ext', 
+           'pname', 'cityname', 'adname', 'photos']]
+    
+    data['longitude']=data['location'].apply(lambda x:x.split(',')[0])
+    data['latitude']=data['location'].apply(lambda x:x.split(',')[1])
+    for i in ['longitude','latitude']:
+        data[i]=data[i].astype('float')
+    data=data.drop_duplicates(['id'])
+    data['gps']=data.apply(lambda x:{'latitude':x['latitude'],'longitude':x['longitude']},axis=1)
+    data['level']=30
+    data.to_excel('高德地图{0}停车场.xlsx'.format(myarea))
+    
+#poi搜索
+areacode=[440103,440104,440105,440106,440111,440112,440113,440114,440115,440117,440118]
+data_list=[]  
+for j in typelist:
+    for k in areacode:
+    
+        url="""https://restapi.amap.com/v3/place/text"""
+        payload = {'key':mkey,
+                    'keywords': '', 
+                   'types': j,
+                   'city':k,
+                   'page':'1',
+                   'extensions':'all'
+                   }
+        r = requests.get(url, params=payload)
+        table=json.loads(r.content)
+        
+        for i in range(0,int(np.ceil(int(table['count'])/20))):
+            time.sleep(np.random.random())
+            pages=i+1
+            payload = {'key':mkey,
+                    'keywords': '', 
+                   'types': j,
+                   'city':k,
+                   'page':pages,
+                   'extensions':'all'
+                   }
+            r = requests.get(url, params=payload)
+            t=json.loads(r.content)
+            data_list.extend(t['pois'])
+            
+            
+data=pd.DataFrame(data_list)
+
+for i in ['parent','address']:
+    data[i]=data[i].apply(lambda x:'N' if type(x)==list else x)
+data=data[data['adname']==myarea]
+data=data[['id','parent', 'name', 'type','address','parking_type','business_area', 'location', 'tel','navi_poiid','timestamp',
+           'biz_ext', 
+       'pname', 'cityname', 'adname', 'photos']]
+
+data['longitude']=data['location'].apply(lambda x:x.split(',')[0])
+data['latitude']=data['location'].apply(lambda x:x.split(',')[1])
+for i in ['longitude','latitude']:
+    data[i]=data[i].astype('float')
+data=data.drop_duplicates(['id'])
+data['gps']=data.apply(lambda x:{'latitude':x['latitude'],'longitude':x['longitude']},axis=1)
+data['level']=30
+data.to_excel('高德地图{0}停车场.xlsx'.format(myarea))
+
+yuexiu=data
+parent_list=[]
+
+url='	https://restapi.amap.com/v3/place/detail?parameters'
+for i in data['parent'].unique():
+    if i !='N':
+        payload = {'key':'***',
+                   'id': i
+               
+               }
+        r = requests.get(url, params=payload)
+        t=json.loads(r.content)
+        parent_list.extend(t['pois'])
+
+parent=pd.DataFrame(parent_list)
+parent=parent.drop_duplicates(['id'])
+data1=data.merge(parent[['id','type','typecode']],how='left',left_on='parent',right_on='id')
+
+               
+
+for i in ['type_y','typecode']:
+    data1[i]=data1[i].fillna('-1')
+    data1[i]=data1[i].apply(lambda x:x.split('|')[0])
+data1['商业场']=data1['typecode'].apply(lambda x: 1 if re.search('^(06|02|05|08|10|11|17)',x) 
+                is not None else 0)
+
+#购物，餐饮，风景，公司,汽车销售,体育休闲,住宿
+#06,05,11,17,02,08,10
+
+data1.to_excel('高德题图天河区停车场.xlsx')
+
+
+data=pd.read_excel('高德题图天河区停车场.xlsx')
+
+olddata=data[data['typecode']!=-1]
+data=data[data['typecode']==-1].drop(['id_y','type_y','typecode','商业场'],axis=1)
+#氚云
+newdata=data
+newdata['入口位置经纬度']=newdata.apply(lambda x:'{0},{1}'.format(x['lng'],x['lat']),axis=1)
+for i in newdata['CreatedBy'].unique():
+    todata=newdata[newdata['CreatedBy']==i]
+
+    todata=todata[['F0000028','CreatedTime','入口位置经纬度']].rename({'F0000028':'数据标题(不可修改)','CreatedTime':'创建时间'},axis=1)
+    todata.to_excel("停车场数据采集基础版{0}.xlsx".format(i))
+
+park_data=pd.read_excel("高德地图海珠区停车场.xlsx")
+park_data['newAdd']=park_data.apply(lambda x:{"Address":x['address'],
+         "Point":{"lat":x['location_y'],"lng":x['location_x']}},axis=1)
+
+
+
+for label, content in park_data[park_data['business_area']=='赤岗'].iterrows():
+
+    pay_loads={"ActionName":"CreateBizObject",
+               "SchemaCode":"*****",
+               "BizObject":str({"CreatedBy":"张*超","OwnerId":"张*超","Name":content['name'],"F0000020":
+                   content['name'],"F0000063":content['newAdd'],"F0000055":content['parking_type']}),
+               "IsSubmit":"true"}
+               
+    r = requests.post(url,headers=form_data,data=json.dumps(pay_loads))
+
+
+downurl="https://www.h3yun.com/Api/DownloadBizObjectFile"
+pay_loads={"attachmentId":"***",
+           "EngineCode":"****"}
+r = requests.post(downurl,headers=form_data,data=pay_loads)
+
+base64.b64decode(r.content)
+
+
+filename='E:\Program Files\Anaconda\kapark\picture'
+
+savePath=os.path.join(filename,"test.jpg")
+with open(savePath ,'wb') as fb:
+    fb.write(r.content)
