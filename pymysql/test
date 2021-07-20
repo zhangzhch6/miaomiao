@@ -22,7 +22,7 @@ import datetime
 import pymysql
 pd.set_option('display.max_columns', None)
 
-os.chdir("E:\Program Files\Anaconda\kapark")
+os.chdir("E:\Program Files\Anaconda\test")
 def create_date(start_date,end_date):
     date_range=pd.date_range(start=start_date,end=end_date,freq='D')
     date_dimension=pd.DataFrame(date_range,columns=['date'])
@@ -83,36 +83,6 @@ class mysql_work():
 
 
 
-
-#获取城市表
-sql="""select id,plate,city,province from c.car_city """
-city=pd.DataFrame(list(test.get_table(sql)),columns=['id','city_code','city','province'])
-
-#更新车场表
-pp=mysql_work(ppcopy_config)
-sql="""select * from t._park
-     """
-data=pd.DataFrame(list(pp.get_table(sql)),columns=['park_id','province','city','area','name','address','type','longtitude','latitude',
-                  'label_type','label'])
-
-data[['business','device','manage_model','collaborator']]=data['type'].str.split('|',expand=True).fillna(20)
-data=data.drop(['type'],axis=1)
-
-
-db2 = pymysql.connect(**pptest_config,database='customer')
-cursor2 = db2.cursor()
-sql1="""delete from c._park"""
-cursor2.execute(sql1) 
-db2.commit()
-db2.close()
-sql=""" 
-    insert into c._park
-    (id, province, city, area, name, address, longtitude,
-       latitude, label_type, label, business, device, manage_model,
-       collaborator) 
-    values 
-      (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)"""
-test.my_insert(sql,data)
 
 
 
