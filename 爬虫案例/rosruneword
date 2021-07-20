@@ -1,0 +1,98 @@
+# -*- coding: utf-8 -*-
+"""
+Created on Mon Jan 18 16:27:56 2021
+
+@author: Administrator
+"""
+
+from translate import Translator
+from bs4 import BeautifulSoup
+import json
+import time
+import requests
+import re
+import numpy as np
+import pandas as pd
+import os 
+pd.set_option('display.max_columns', None)
+os.chdir("E:\Program Files\Anaconda\kapark")
+
+url="""https://db.reignofshadow.com/runewords"""
+r = requests.get(url)
+soup=BeautifulSoup(r.content)
+
+
+a=soup.prettify()
+test=soup.find_all('div',"card col-md-12 mb-3")
+
+
+
+b=soup.find('span',text='Artlessness').find_parent('div',class_="card col-md-12 mb-3")
+
+
+result=list()
+for item in test:
+    image=[re.split('(/inv|/|\.)',i['src'])[2] for i in item.find_all('img')]
+    name=item.select_one('span[class="text-unique"]').text
+    word=item.select_one('span[class="text-grey text-normal"]')
+    reqlevel=item.select_one('p[class="card-text"]').get_text().strip().split(':  ')[1]
+    equipment=item.find_all('span',class_=re.compile("text-(gold|grey)$"))
+    
+    equipment=' '.join([re.sub('( |\n|Skull)','',i.get_text()) for i in equipment if len(i['class'])==1 and i.get_text().find('During')==-1])
+    
+    attr=item.find_all('p',class_=re.compile("card-text text-"))
+    txtlen=len(item.find_all('p',class_="card-text text-dgreen"))
+    word=item.select('span[class="text-reset"]')
+    word=[re.sub('[\(\)]','',i.text) for i in word[:int(len(word)/txtlen)]]
+    
+    if attr:
+        attribute='\n'.join([i.get_text().strip() for i in attr])
+        
+    a=[name,image,word,reqlevel,equipment,attribute]
+    result.append(a)
+    
+data=pd.DataFrame(result,columns=['name','image','word','reqlevel','equipment','attribute'])
+
+
+data[['n','装备','不可用装备']]=data['equipment'].str.split(':',expand=True)
+
+for key,values in data.iterrows():
+    t1=np.array(values['image'])
+    t2=np.array(values['word'])
+    #t1[np.argwhere(t1!='jw1')]=t2
+    t3=zip(np.argwhere(t1!='jw1').flat,range(len(t2)))
+    for i in t3:
+        values['image'][i[0]]=values['word'][i[1]]
+      
+data['公式']=data['image'].apply(lambda x:[i.replace('jw1','珠宝') for i in x])
+gg=np.unique(data['公式'].sum())
+
+gg=[i for i in gg]
+
+gem_dict={'Chipped Amethyst':'碎裂的紫宝石',
+ 'Chipped Diamond':'碎裂的钻石',
+ 'Chipped Emerald':'碎裂的绿宝石',
+ 'Chipped Rainbowgeÿc1mÿc3':'碎裂的彩虹石',
+ 'Chipped Ruby':'碎裂的红宝石',
+ 'Chipped Sapphire':'碎裂的蓝宝石',
+ 'Chipped Skull':'碎裂的骷髅',
+ 'Chipped Topaz':'碎裂的黄宝石',
+ 'Flawed Rainbowgeÿc1mÿc3':'瑕疵的彩虹石',
+ 'Flawed Skull':'瑕疵的骷髅',
+ 'Flawless Skull':'无瑕的骷髅',
+ 'Perfect Diamond':'完美的钻石',
+ 'Perfect Emerald':'完美的绿宝石',
+ 'Perfect Rainbowgeÿc1mÿc3':'完美的彩虹石',
+ 'Perfect Ruby':'完美的红宝石',
+ 'Perfect Sapphire':'完美的蓝宝石',
+ 'Perfect Skull':'完美的骷髅',
+ 'Perfect Topaz':'完美的黄宝石',
+ 'Ruby':'红宝石',
+ 'Stone of Concentration':'集中之石',
+ 'Stone of Conviction':'信念之石',
+ 'Stone of Fanatism':'狂热之石',
+ 'Stone of Holy Freeze':'圣冰之石'}
+data['公式']=data['公式'].apply(lambda x:','.join([gem_dict[i] if i in gem_dict.keys() else i for i in x]))
+
+data.to_excel('ros0.91神符之语.xlsx')
+a=pd.DataFrame(gg)
