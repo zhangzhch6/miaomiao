@@ -1,0 +1,139 @@
+# -*- coding: utf-8 -*-
+"""
+Created on Wed Apr 15 14:57:34 2020
+
+@author: Administrator
+"""
+
+import re
+import smtplib
+from email.mime.text import MIMEText
+from email.utils import formataddr
+from email.mime.multipart import MIMEMultipart
+from email.mime.application import MIMEApplication
+import json
+import requests
+import datetime
+import pandas as pd
+import pymysql
+from functools import reduce
+import numpy as np
+import os
+import cv2
+
+from apscheduler.schedulers.blocking import BlockingScheduler 
+from dateutil.relativedelta import relativedelta 
+from apscheduler.events import EVENT_JOB_ERROR, EVENT_JOB_EXECUTED,EVENT_JOB_MISSED
+kcmain_config={'host':"*",'port':1111,'user':"***",'passwd':"**"}
+
+#发邮件小脚本
+my_sender=""
+my_pass=""
+def mail(names,subject,my_user):
+    ret=True
+    try:
+        message = MIMEMultipart()
+        
+        message.attach( MIMEText("", 'plain', 'utf-8'))
+       # msg=MIMEText('填写邮件内容','plain','utf-8')
+        message['From']=formataddr(["zzc",my_sender])  # 括号里的对应发件人邮箱昵称、发件人邮箱账号
+        message['To']=','.join(my_user)              # 括号里的对应收件人邮箱昵称、收件人邮箱账号
+        message['Subject']=subject                # 邮件的主题，也可以说是标题
+        for name in names:
+            xlsxpart = MIMEApplication(open(name, 'rb').read()) 
+            basename = name
+            xlsxpart.add_header('Content-Disposition', 'attachment', filename=('gbk', '', basename))#注意：此处basename要转换为gbk编码，否则中文会有乱码。            
+            message.attach(xlsxpart)
+ 
+        server=smtplib.SMTP_SSL("smtp.exmail.qq.com", 465)  # 发件人邮箱中的SMTP服务器，端口是25
+        server.login(my_sender, my_pass)  # 括号中对应的是发件人邮箱账号、邮箱密码
+        server.sendmail(my_sender,my_user,message.as_string())  # 括号中对应的是发件人邮箱账号、收件人邮箱账号、发送邮件
+        server.quit()  # 关闭连接
+    except Exception:  # 如果 try 中的语句没有执行，则会执行下面的 ret=False
+        ret=False
+    return ret
+
+
+#报表任务
+def dd_job():      
+    today=datetime.date.today()  
+    day=(today-datetime.timedelta(days=3),today-datetime.timedelta(days=1))
+    
+    data=m.check(day,value=0,new_dict={v:k for k,v in map_table.items()})
+    if type(data)==int or data.empty: 
+        print('{0}至{1}**'.format(*day))
+    elif not data.empty:
+        name=[today.strftime("%Y-%m-%d")+"**.xlsx"]
+        data.to_excel(name[0])
+        myuser=['**','**@qq.com','**'] 
+        ret=m.mail(name,"**",myuser)
+        if ret:
+            print("邮件发送成功")
+        else:
+            print("邮件发送失败")
+    data=m.check(day,value=0.1)
+    if type(data)==int : 
+        print('{0}至{1}**'.format(*day))
+    elif not data.empty:
+        name=[today.strftime("%Y-%m")+"**.xlsx"]
+        data.to_excel(name[0])
+        myuser=['**','**'] 
+        ret=m.mail(name,"**",myuser)
+        if ret:
+            print("邮件发送成功")
+        else:
+            print("邮件发送失败")
+            
+            
+            
+#监控系统
+def my_listener(event):
+    kcmain=m.kcmain_config
+    if event.exception:
+         date=datetime.datetime.now()
+         db = pymysql.connect(**kcmain)
+         cursor = db.cursor()
+
+         sql="""insert into t 
+            (create_date_time,code,exception_content,name) 
+            values 
+              ({0!r},{1:d},{2!r},{3!r})""".format(date.strftime('%Y-%m-%d %H:%M:%S'),event.code,
+              str(event.exception),event.job_id)
+         try:            
+             cursor.execute(sql)           
+             db.commit()
+         except:            
+             db.rollback()   
+         db.close()
+         print('The job crashed :(')
+
+    else:
+        print('The job worked :)')
+             
+             
+my_report =BlockingScheduler()
+
+#每周一8点半运行
+my_report.add_job(**_job, 'cron', day_of_week='mon',  hour=8,minute=30,
+                            start_date='2020-01-27 00:50:00', end_date='2050-01-01 00:00:00',id='**_job')
+#周六日1点工作
+my_report.add_job(**_job, 'cron', day_of_week='5-6', hour=1,
+                            start_date='2019-10-23 8:30:00', end_date='2050-01-01 00:00:00',id='**_job')
+
+#每天0:30工作
+my_report.add_job(**_job, 'cron',  hour=0, minute=30,
+                            start_date='2020-04-03 00:30:00', end_date='2050-01-01 00:00:00',id='**_job')
+
+
+#每月第一天8点工作
+my_report.add_job(**_job, 'cron',  day=1, hour=8,
+                            start_date='2020-02-27 00:50:00', end_date='2050-01-01 00:00:00',id='**_job')
+#每隔5分钟运行
+my_report.add_job(**_job, 'cron',   minute='*/5',
+                            start_date='2020-12-28 15:15:00', end_date='2050-12-30 15:50:00',id='**_job')
+
+
+#加入监控计划
+my_report.add_listener(my_listener, EVENT_JOB_EXECUTED | EVENT_JOB_ERROR|EVENT_JOB_MISSED)
+my_report.start()
+
