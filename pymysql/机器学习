@@ -1,0 +1,272 @@
+
+import numpy as np
+import pandas as pd
+import matplotlib.pyplot as plt
+import seaborn as sns
+from scipy import stats
+from sklearn.preprocessing import StandardScaler ,RobustScaler 
+from scipy.stats import skew
+from sklearn import preprocessing
+import os
+import datetime
+
+import pymysql
+
+os.chdir("E:\\Program Files\\Anaconda\\valet")
+
+
+valet=pd.read_excel('valet.xlsx')
+pd.set_option('display.max_columns', None)
+
+valet['fdatetime']=valet['fdatetime'].apply(lambda x:datetime.datetime.strptime(x,'%Y-%m-%d %H:%M:%S'))
+ftime=pd.DataFrame(pd.date_range(start='2018-01-01 00:00:00',end='2019-02-28 23:59:59',freq='H'),columns=['fdatetime'])
+ftime['fDate']=ftime['fdatetime'].apply(lambda x:x.date())
+mergedata=ftime.merge(weather,how='left',on='fDate')
+all_data=mergedata.merge(valet,how='left',on='fdatetime').fillna(0).drop(['fDate'],axis=1)
+
+all_data['fyear']=all_data['fdatetime'].apply(lambda datestring:datestring.year)
+all_data['fmonth']=all_data['fdatetime'].apply(lambda datestring:datestring.month)
+all_data['fmday']=all_data['fdatetime'].apply(lambda datestring:datestring.day)
+all_data['fhour']=all_data['fdatetime'].apply(lambda datestring:datestring.hour)
+all_data['wday']=all_data['fdatetime'].apply(lambda datestring:datestring.timetuple().tm_wday)
+all_data['yday']=all_data['fdatetime'].apply(lambda datestring:datestring.timetuple().tm_yday)
+
+ob=all_data.copy()
+
+
+
+all_data['season']=0
+all_data.loc[all_data['fmonth'].isin([1,2,3]),'season']=0
+all_data.loc[all_data['fmonth'].isin([4,5,6]),'season']=1
+all_data.loc[all_data['fmonth'].isin([7,8,9]),'season']=2
+all_data.loc[all_data['fmonth'].isin([10,11,12]),'season']=3
+           
+all_data['daytimebin']=0  
+all_data.loc[all_data['fhour']<=6,'daytimebin']=1
+all_data.loc[(all_data['fhour']==7),'daytimebin']=2
+all_data.loc[(all_data['fhour']==21),'daytimebin']=2
+all_data.loc[(all_data['fhour']>7) & (all_data['fhour']<10),'daytimebin']=3
+all_data.loc[(all_data['fhour']>=10) & (all_data['fhour']<=16),'daytimebin']=4
+all_data.loc[(all_data['fhour']>=17) & (all_data['fhour']<=18),'daytimebin']=5
+all_data.loc[(all_data['fhour']>=19) & (all_data['fhour']<=20),'daytimebin']=6
+all_data.loc[all_data['fhour']>=22,'daytimebin']=1
+
+all_data.drop(all_data[all_data['fWindScale']==7].index,inplace=True)
+
+
+
+y=all_data['count']
+
+y_test=np.log1p(all_data.loc[all_data['fmday']>20,'count'])
+y_train=np.log1p(all_data.loc[all_data['fmday']<=20,'count'])
+
+all_data.drop(['fdatetime','yday','count','fTextDay','fTextNight'],axis=1,inplace=True)
+
+col=['fHigh','fLow']
+all_data[col]=all_data[col].astype('float64')
+col2=['fWorktDay','fCodeDay','fCodeNight','fWindScale','wday','fmonth','fhour','fHoliday','fyear','daytimebin','season']
+all_data[col2]=all_data[col2].astype('str')
+
+data3=pd.get_dummies(all_data)
+x_train=data3[data3['fmday']<=20]
+x_test=data3[data3['fmday']>20]
+
+
+#可视化
+ob2=ob[(ob['fhour']>6)&(ob['fhour']<22)]
+
+sns.catplot(x='fhour',y='count',kind='point',row='fWorkDay',hue='fHoliday',data=ob2)
+
+sns.catplot(x='fhour',y='count',kind='box',row='fWorkDay',col='fminute',data=ob2)
+
+sns.catplot(x='fhour',y='count',kind='point',row='fWorkDay',hue='wday',data=ob2)
+
+sns.catplot(x='fminute',y='count',kind='point',row='fhour',col='fWorkDay',height=3,aspect=1,data=ob2)
+
+sns.catplot(x='fmday',y='count',kind='point',col='wday',data=ob)
+
+sns.catplot(x='fWindScale',y='count',kind='box',row='fWorkDay',data=ob2)
+
+sns.catplot(x='fHigh',y='count',kind='point',row='fWorkDay',data=ob2)
+
+sns.catplot(x='fmonth',y='count',kind='point',row='fWorkDay',data=ob2)
+
+sns.scatterplot(x='fLow',y='fHigh',data=ob2)
+
+sns.catplot(x='fCodeDay',y='count',kind='box',row='fWorkDay',data=ob2)
+
+sns.catplot(x='fCodeNight',y='count',kind='box',row='fWorkDay',data=ob2)
+
+sns.catplot(x='fmday',y='count',kind='point',row='fWorkDay',data=ob2)
+
+sns.catplot(x='wday',y='count',kind='point',row='fWorkDay',data=ob2)
+
+sns.catplot(x='fyear',y='count',kind='point',row='fWorkDay',data=ob2)
+
+
+from sklearn.ensemble import RandomForestRegressor,  GradientBoostingRegressor
+from sklearn.kernel_ridge import KernelRidge
+from sklearn.model_selection import KFold, cross_val_score, train_test_split
+from sklearn.pipeline import make_pipeline
+from sklearn.model_selection import GridSearchCV
+from sklearn.linear_model import ElasticNet,LinearRegression
+from sklearn.linear_model import Lasso
+from sklearn.linear_model import Ridge
+import xgboost as xgb
+import lightgbm as lgb
+from sklearn.metrics import mean_squared_error
+from sklearn.base import BaseEstimator, TransformerMixin, RegressorMixin, clone
+from sklearn.metrics import mean_squared_error
+def model_score(model):
+
+    model.fit(x_train,y_train)
+    y_predict=model.predict(x_test)
+    return np.sqrt(mean_squared_error(y_test, y_predict))
+
+n_folds = 5
+def rmsle_cv(model):
+    kf = KFold(n_folds, shuffle=True, random_state=42).get_n_splits(x_train.values)
+    rmse= np.sqrt(-cross_val_score(model, x_train.values, y_train, scoring="neg_mean_squared_error", cv = kf))
+    return(rmse)
+
+ridge =make_pipeline(RobustScaler(),Ridge(alpha=10))
+score=rmsle_cv(ridge)
+print(" Averaged base models score: {:.4f} ({:.4f})\n".format(score.mean(), score.std()))
+
+
+ENet = make_pipeline(RobustScaler(), ElasticNet(alpha=0.005, l1_ratio=1, random_state=1,max_iter=5000))
+score=rmsle_cv(ENet)
+print(" Averaged base models score: {:.4f} ({:.4f})\n".format(score.mean(), score.std()))
+
+ENet.fit(x_train,y_train)
+model_score(ridge,x_test,y_test)
+
+lasso = make_pipeline(RobustScaler(), Lasso(alpha =0.005, random_state=1,max_iter=5000))
+score=rmsle_cv(lasso)
+print(" Averaged base models score: {:.4f} ({:.4f})\n".format(score.mean(), score.std()))   
+
+GBoost = GradientBoostingRegressor(n_estimators=300, learning_rate=0.2,
+                                  max_depth=5, max_features='sqrt',
+                                  min_samples_leaf=100, min_samples_split=500, 
+                                  loss='huber', random_state =1)
+score=rmsle_cv(GBoost)
+print(" Averaged base models score: {:.4f} ({:.4f})\n".format(score.mean(), score.std()))
+
+model_score(GBoost)
+
+
+model_xgb = xgb.XGBRegressor(colsample_bytree=0.5, gamma=0.0, learning_rate=0.1, 
+       max_depth=6, min_child_weight=1, n_estimators=300, random_state=0,
+       reg_alpha=0.0, reg_lambda=1, 
+       silent=True, subsample=0.7)
+score=rmsle_cv(model_xgb)
+print(" Averaged base models score: {:.4f} ({:.4f})\n".format(score.mean(), score.std()))
+
+model_xgb.fit(x_train,y_train)
+model_score(model_xgb,x_train,y_train)
+model_score(model_xgb,x_test,y_test)
+
+
+model_lgb = lgb.LGBMRegressor( learning_rate=0.1, max_depth=4,
+       min_child_samples=20, min_child_weight=.01, min_split_gain=0.0,
+       n_estimators=300, n_jobs=-1, num_leaves=15, objective=None,
+       random_state=None, reg_alpha=0.0, 
+       reg_lambda=0.1,bagging_fraction =0.5,feature_fraction=0.5,max_bin =10)
+
+score=rmsle_cv(model_lgb)
+print(" Averaged base models score: {:.4f} ({:.4f})\n".format(score.mean(), score.std()))
+
+model_score(model_lgb)
+
+model_lgb.fit(x_train,y_train)
+model_score(model_lgb,x_train,y_train)
+model_score(model_lgb,x_test,y_test)
+
+cv_params = {'max_bin': np.arange(20,40,4)}
+cv_params = {'colsample_bytree': [0.5,0.6,0.7,0.8]}
+cv_params = {'colsample_bytree': [0.5,0.6,0.7,0.8],'subsample': [0.5,0.6,0.7,0.8]}
+
+optimized_GBM = GridSearchCV(estimator=model_xgb , param_grid=cv_params, scoring='neg_mean_squared_error', cv=10, verbose=1, n_jobs=3)
+optimized_GBM.fit(x_train,y_train)
+optimized_GBM.grid_scores_
+optimized_GBM.best_params_
+
+
+sns.set(rc={'figure.figsize':(16,20)})
+feature_importance = GBoost.feature_importances_
+# make importances relative to max importance
+feature_importance = 100.0 * (feature_importance / feature_importance.max())
+#feature_importance = 100.0 * feature_importance 
+sorted_idx = np.argsort(feature_importance)
+pos = np.arange(sorted_idx.shape[0]) + .5
+plt.subplot(1, 2, 2)
+plt.barh(pos, feature_importance[sorted_idx], align='center')
+plt.yticks(pos, x_train.columns[sorted_idx])
+plt.xlabel('Relative Importance')
+plt.title('Variable Importance')
+plt.show()
+
+class BaseAveragingModels(BaseEstimator, RegressorMixin, TransformerMixin):
+    def __init__(self, models):
+        self.models = models
+        
+    # we define clones of the original models to fit the data in
+    def fit(self, X, y):
+        self.models_ = [clone(x) for x in self.models]
+        
+        # Train cloned base models
+        for model in self.models_:
+            model.fit(X, y)
+
+        return self
+    
+    #Now we do the predictions for cloned models and average them
+    def predict(self, X):
+        predictions = np.column_stack([
+            model.predict(X) for model in self.models_
+        ])
+        return np.mean(predictions, axis=1)  
+
+
+class AveragingModels(BaseEstimator, RegressorMixin, TransformerMixin):
+    def __init__(self, models):
+        self.models = models
+        self.score=[]
+        
+    def fit(self, X, y):
+        self.score=[]
+        self.models_ = [clone(x) for x in self.models]
+        
+        for model in self.models_:
+            model.fit(X, y)
+            self.score.append(1/np.sqrt(mean_squared_error(y_train, model.predict(x_train.values))))            
+        return self
+    
+    def predict(self, X):
+        predictions = np.column_stack([
+            weight*self.models_[i].predict(X) for i,weight in enumerate(np.array(self.score)/sum(self.score)) 
+        ])
+        return np.sum(predictions, axis=1)  
+
+
+averaged_models =AveragingModels(models= (model_lgb,GBoost))
+score=rmsle_cv(averaged_models)
+print(" Averaged base models score: {:.4f} ({:.4f})\n".format(score.mean(), score.std()))
+
+averaged_models.fit(x_train,y_train)
+model_score(averaged_models)
+
+
+def myresidual(model):
+    y_predict=model.predict(x_test)
+    return np.subtract(np.exp(y_predict)-1,np.exp(y_test)-1)
+
+resi=myresidual(averaged_models)
+
+sns.set(rc={'figure.figsize':(10,3)})
+sns.distplot(resi)
+
+sns.scatterplot(x=y_test.index,y=resi)
+sns.boxplot(x=resi)
+
+sum(abs(resi)<30)/len(resi)
