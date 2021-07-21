@@ -1,0 +1,200 @@
+# @Time    : 2018/2/7
+# @Author  : fh
+# @File    : demo.py
+# @Desc    :
+"""
+    Give a demo to recognize plate from a raw image
+"""
+import numpy as np
+import cv2
+import os 
+import matplotlib.pyplot as plt
+import tensorflow as tf
+import pandas as pd
+#os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2' 
+
+import hyperlpr as lpr
+
+from plategenerate import genplate_advanced,PlateCommon
+from hyperlpr import detect,segmentation,pipline,finemapping,cache,finemapping_vertical,typeDistinguish,e2e 
+
+
+def mysegmentation(image):
+    plate  =cv2.resize(image,(136,36*2))   
+    image_rgb = finemapping.findContoursAndDrawBoundingBox(plate)
+    #image_rgb = finemapping_vertical.finemappingVertical(image_rgb)
+    #cache.verticalMappingToFolder(image_rgb)
+    image_rgb = cv2.cvtColor(image_rgb,cv2.COLOR_RGB2GRAY)
+    val = segmentation.slidingWindowsEval(image_rgb);
+    return val
+
+
+
+#生产车牌数据
+G = genplate_advanced.GenPlate("E:\\Program Files\\Anaconda\\Lib\\site-packages\\plategenerate\\font\\platech.ttf",
+                                 'E:\\Program Files\\Anaconda\\Lib\\site-packages\\plategenerate\\font\\platechar.ttf',
+                                 "E:\\Program Files\\Anaconda\\Lib\\site-packages\\plategenerate\\NoPlates")
+
+PlateCommon.index
+
+batchsize=100000
+
+l_image,l_plateStr= G.genBatch(batchsize,1,range(31,65),".\\plate",(272,72))
+y_label=np.zeros([7,batchsize,65])
+for k,i in enumerate(l_plateStr):
+    for m,s in enumerate(i):      
+        y_label[m,k,PlateCommon.index[s]]=1
+
+for i in range(7):   
+    np.savetxt('.\label\\'+str(i)+'test.txt',y_label[i],fmt="%1.0f")
+
+
+
+
+
+for i in range(batchsize):                   
+    image=cv2.imread('.\\plate\\'+str(i)+'.jpg')
+    val=mysegmentation(image) 
+    if len(val)==3 and val[0][0].size!=0 and val[0][1].size!=0 \
+    and val[0][2].size!=0 and val[0][3].size!=0 and val[0][4].size!=0 and val[0][5].size!=0 and val[0][6].size!=0:
+        
+        np.savetxt('.\\photo\\platenum0\\'+str(i)+'.txt',cv2.resize(val[0][0],(28,28)),fmt="%.1f")
+        np.savetxt('.\\photo\\platenum1\\'+str(i)+'.txt',cv2.resize(val[0][1],(28,28)),fmt="%.1f")
+        np.savetxt('.\\photo\\platenum2\\'+str(i)+'.txt',cv2.resize(val[0][2],(28,28)),fmt="%.1f")
+        np.savetxt('.\\photo\\platenum3\\'+str(i)+'.txt',cv2.resize(val[0][3],(28,28)),fmt="%.1f")
+        np.savetxt('.\\photo\\platenum4\\'+str(i)+'.txt',cv2.resize(val[0][4],(28,28)),fmt="%.1f")
+        np.savetxt('.\\photo\\platenum5\\'+str(i)+'.txt',cv2.resize(val[0][5],(28,28)),fmt="%.1f")
+        np.savetxt('.\\photo\\platenum6\\'+str(i)+'.txt',cv2.resize(val[0][6],(28,28)),fmt="%.1f")
+
+
+#读入训练数据
+
+y_label=np.loadtxt('.\\label\\1test.txt')
+y_label=y_label.astype('float32')
+
+train_x=[]
+myindex=[]
+
+for i in range(batchsize): 
+    if os.path.exists('.\\photo\\platenum1\\'+str(i)+'.txt'):
+        train_x.append(np.loadtxt('.\\photo\\platenum1\\'+str(i)+'.txt'))
+        myindex.append(i)
+        
+train_x=np.array(train_x)
+
+y_label=y_label[myindex]
+
+#y_label=y_label[:,:31]
+y_label=y_label[:,31:]
+
+
+pipline.SimpleRecognizePlate(image)
+
+image=detect.detectPlateRough(image)[0][0]
+
+
+
+new_chars={i:v for v,i in PlateCommon.index.items()}
+new_chars[np.argmax(y_label[5])]
+
+
+image=cv2.imread('./1.jpg')
+cv2.imshow("section",image)
+cv2.waitKey(0)
+
+
+cv2.imshow("section",  image_rgb)
+cv2.waitKey(0)
+
+
+cv2.imshow('image', tt[0][0])
+cv2.waitKey(0)   
+
+cv2.imshow('image', val[0][0])
+cv2.waitKey(0)           
+            
+train_x=train_x.astype('float32')
+
+train_X=train_x[:95000]
+test_X=train_x[95000:]
+train_y=y_label[:95000]
+test_y=y_label[95000:]
+
+keepprob=0.5
+
+def max_pool_2x2(x):
+    return tf.nn.max_pool(x,ksize=[1,2,2,1],strides=[1,2,2,1],padding='SAME')
+
+
+x_image=tf.placeholder(tf.float32,[None,28,28])
+x=tf.reshape(x_image,shape=[-1,28,28,1])
+y=tf.placeholder(tf.float32,[None,34])
+
+W_conv1=tf.get_variable('W1',shape=[5,5,1,32],initializer=tf.truncated_normal_initializer(mean=0.0,stddev=0.1))
+b_conv1=tf.get_variable('b1',shape=[32],initializer=tf.constant_initializer(0.1))
+
+
+
+h_conv1=tf.nn.relu(tf.nn.conv2d(x,W_conv1,strides=[1,1,1,1],padding='SAME')+b_conv1)
+h_pool1=max_pool_2x2(h_conv1)
+
+
+  
+W_conv2=tf.get_variable('W2',shape=[5,5,32,128],initializer=tf.truncated_normal_initializer(mean=0.0,stddev=0.1))
+b_conv2=tf.get_variable('b2',shape=[128],initializer=tf.constant_initializer(0.1))
+
+h_conv2=tf.nn.relu(tf.nn.conv2d(h_pool1,W_conv2,strides=[1,1,1,1],padding='SAME')+b_conv2)
+h_pool2=max_pool_2x2(h_conv2)
+
+W_fc1=tf.get_variable("Wf1",shape=[7*7*128,1024],initializer=tf.truncated_normal_initializer(mean=0.0,stddev=0.1))
+b_fc1=tf.get_variable('bf1',shape=[1024],initializer=tf.constant_initializer(0.1))
+h_pool_flat=tf.reshape(h_pool2,[-1,7*7*128])
+h_fc1=tf.nn.relu(tf.matmul(h_pool_flat,W_fc1)+b_fc1)
+keep_prob=tf.placeholder(tf.float32)
+h_fc1_drop=tf.nn.dropout(h_fc1,keep_prob)
+W_fc2=tf.get_variable('Wf3_1',shape=[1024,34],initializer=tf.truncated_normal_initializer(mean=0.0,stddev=0.1))
+b_fc2=tf.get_variable('bf3_1',shape=[34],initializer=tf.constant_initializer(0.1))
+
+y_conv=tf.matmul(h_fc1_drop,W_fc2)+b_fc2
+
+
+cross_entropy=tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits(labels=y,logits=y_conv))
+train_step=tf.train.AdamOptimizer(learning_rate=0.001,beta1=0.9).minimize(cross_entropy)
+
+
+correct_prediction=tf.equal(tf.argmax(y_conv,1),tf.argmax(y,1))
+accuracy=tf.reduce_mean(tf.cast(correct_prediction,tf.float32))
+
+mybatch=68
+
+
+
+myeval=[]
+init = tf.global_variables_initializer()
+saver=tf.train.Saver(max_to_keep=1)
+
+
+with tf.Session() as sess:
+  
+      
+  sess.run(init)
+  for s in range(8):
+      myindice=list(range(len(train_X)))
+      np.random.shuffle(myindice)
+      train_X=train_X[myindice]
+      train_y=train_y[myindice]
+
+      for i in range((len(train_X)//mybatch)):
+          sess.run(train_step,feed_dict={x_image:train_X[i*mybatch:i*mybatch+mybatch],y:train_y[i*mybatch:i*mybatch+mybatch],keep_prob:keepprob})
+          if np.mod(i,200)==0:
+              print(sess.run(accuracy,feed_dict={x_image:train_X[:10000],y:train_y[:10000],keep_prob:1.0}))
+      train_acc=sess.run(accuracy,feed_dict={x_image:test_X,y:test_y,keep_prob:1.0})
+      print("eval:%1.4f"%(train_acc))
+      myeval.append(train_acc)
+      #saver.save(sess,'.\\mymodel\\plate.ckpt',global_step=i+1)
+
+with tf.Session() as sess:
+    model_file=tf.train.latest_checkpoint('.\\mymodel')
+    saver.restore(sess,model_file)
+    train_acc=sess.run(accuracy,feed_dict={x_image:test_X,y:test_y,keep_prob:1.0})
+    print("eval:%1.4f"%(train_acc))
