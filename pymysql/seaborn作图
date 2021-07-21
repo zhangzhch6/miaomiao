@@ -1,0 +1,26 @@
+import matplotlib.pyplot as plt
+import seaborn as sns
+from IPython.display import display
+
+colors=['red','chocolate','darkorange','gold','limegreen','dodgerblue','blueviolet','pink']
+def plot1(data):
+    data=data.rename({'**':'**'},axis='columns')
+    g=sns.catplot(x='日期',y='总收入',kind='bar',data=data)
+    g.set(ylim=(0,None))
+    g.fig.suptitle('*');
+    g.savefig(".\picture\plot.png")
+    display(data[['日期','总收入']])
+    return data
+
+
+#做饼
+if len(tmp)>0 and tmp['money'].sum()>0:
+    for i,key in  enumerate(tmp['f1'].unique()):
+        if i>=4:
+            fig, ax = plt.subplots()    
+            ax.pie('money', labels='f2', colors=colors,autopct='%1.1f%%',
+                   startangle=0,textprops={'fontsize':10},data=tmp[tmp['f1']==key].sort_values(by=['f2'],ascending=False))
+            ax.axis('equal') 
+            plt.legend(loc="upper right",fontsize=12,bbox_to_anchor=(1.5,1),borderaxespad=0.3)
+            ax.set_title('%s支付方式对比'%(key));
+            plt.savefig(".\picture\plot{0}.png".format(i-4))
