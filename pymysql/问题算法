@@ -1,0 +1,27 @@
+#有一个dataframe序列，字符串列表组成，需要对每个列表剔除整个序列中重复的字符串，优先保留开始的列表中的字符串
+import os 
+import pandas as pd
+os.getcwd()
+pd.set_option('display.max_columns', None)
+os.chdir("E:\Program Files\Anaconda\kapark")
+
+
+data=pd.read_excel("data.xls",header=1)
+
+test=data['f1'].str.split(',')
+
+for i in range(1,len(test)):
+    table=test[:i]
+    dd=pd.Series([j for i in table for j in i ])
+    test[i]=[x for x in test[i] if  x not in dd.unique()]
+
+
+data['f1']=test
+data['f1']=data['f1'].apply(lambda x:','.join(x))
+
+data.to_excel("data.xls")
+
+data2=pd.read_excel("data2.xlsx")
+result=data2[~data2['f2'].isin(test.sum())]
+
+result.to_excel("dd.xlsx")
