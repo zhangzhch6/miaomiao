@@ -1,0 +1,153 @@
+
+import datetime
+from aliyun.log import *
+import re
+import pandas as pd
+
+
+client = LogClient(endpoint, access_key_id, access_key)
+data=pd.DataFrame()
+for i in range(0,1):
+    res = client.get_log_all(project=project,logstore=logstore,
+                             from_time='{0} 00:00:00'.format(datetime.date.today()-datetime.timedelta(days=1+i)),
+                             to_time='{0} 23:59:59'.format(datetime.date.today()-datetime.timedelta(days=1+i)))
+    
+    mylogs=[]
+    for x in res:
+        for l in x.logs:        
+            mylogs.append(l)
+    result=pd.DataFrame({'dict':[i.get_contents() for i in mylogs],
+                                 'time':[datetime.datetime.fromtimestamp(i.get_time()) for i in mylogs]})
+    print(datetime.datetime.now())
+    data=pd.concat((data,result))
+result=data
+result['date']=result['time'].dt.date
+result['request_uri']=result['dict'].apply(lambda x:x['request_uri'])  
+
+result['url']=result['request_uri'].apply(lambda x:x.split('?')[0])
+
+result['request_time']=result['dict'].apply(lambda x:x['request_time']) 
+result['request_time']=result['request_time'].astype('float')
+result['overtime']=result['request_time'].apply(lambda x:1 if x>10 else 0) 
+data=result.groupby(['url','date']).agg({'request_time':['mean','std'],'overtime':['sum','count']})
+data.columns=['平均请求时长','标准差','超时次数','请求次数']
+data=data.unstack(-1).reset_index()
+data1=data[data[(   'url',         '')].str.contains('chunk')]
+data1.to_excel('请求时间对比.xlsx')
+
+def cloud(project='',logstore=''):
+
+    client = LogClient(endpoint, access_key_id, access_key)
+    data=pd.DataFrame()
+    for i in range(0,1):
+        res = client.get_log_all(project=project,logstore=logstore,
+                                 from_time='{0} 00:00:00'.format(datetime.date.today()-datetime.timedelta(days=1+i)),
+                                 to_time='{0} 23:59:59'.format(datetime.date.today()-datetime.timedelta(days=1+i)))
+        
+        mylogs=[]
+        for x in res:
+            for l in x.logs:        
+                mylogs.append(l)
+        result=pd.DataFrame({'dict':[i.get_contents() for i in mylogs],
+                                     'time':[datetime.datetime.fromtimestamp(i.get_time()) for i in mylogs]})
+        print(datetime.datetime.now())
+        data=pd.concat((data,result))
+    result=data
+    result['request_uri']=result['dict'].apply(lambda x:x['request_uri'])  
+    
+    result['url']=result['request_uri'].apply(lambda x:x.split('?')[0])
+    
+    result['request_time']=result['dict'].apply(lambda x:x['request_time']) 
+    result['request_time']=result['request_time'].astype('float')
+    result['overtime']=result['request_time'].apply(lambda x:1 if x>10 else 0) 
+    data=result.groupby(['url']).agg({'request_time':['mean','std'],'overtime':['sum','count']}).reset_index()
+    data.columns=['url','平均请求时长','标准差','超时次数','请求次数']
+    
+    
+
+    with pd.ExcelWriter('接口请求时间统计.xlsx') as writer: 
+        t=data.sort_values(by='平均请求时长',ascending=False)[['url','平均请求时长']].head(10)
+        t.to_excel(writer, sheet_name='平均请求时长前十')
+        t=data.sort_values(by='标准差',ascending=False)[['url','标准差']].head(10)
+        t.to_excel(writer, sheet_name='请求时长变异程度前十')
+        t=data.sort_values(by='超时次数',ascending=False)[['url','超时次数']].head(10)
+        t.to_excel(writer, sheet_name='超时次数前十')
+        t=data.sort_values(by='请求次数',ascending=False)[['url','请求次数']].head(10)
+        t.to_excel(writer, sheet_name='请求次数前十')
+        data.to_excel(writer, sheet_name='汇总统计')
+
+    #data=data[data['overtimes']>0]
+    return data
+
+data=cloud()
+
+result['actPayCharge']=result['content'].apply(lambda x:re.sub('[=,]','',re.findall('=.*?,',x)[5])) 
+
+result['paymentModeRemark']=result['content'].apply(lambda x:re.sub('[=,]','',re.findall('=.*?,',x)[10])) 
+result['billCode']=result['content'].apply(lambda x:re.sub('[=,]','',re.findall('=.*?,',x)[11])) 
+
+result['date']=result['time'].dt.date
+result=result.drop_duplicates(['billCode','date'])
+dd=result.groupby('date')['billCode'].count().reset_index()
+
+resul2=result.drop_duplicates(['billCode'])
+
+
+
+
+
+
+
+    
+def weekreport():
+    t1=datetime.datetime.now()
+    client = LogClient(endpoint, access_key_id, access_key)
+
+    starttime = datetime.datetime.now().replace(hour=0,minute=0,second=0,microsecond=0)
+    totime =datetime.datetime.now().replace(hour=11,minute=59,second=59,microsecond=999)
+
+    res = client.get_log_all(project=project,logstore=logstore,from_time=starttime.strftime('%Y-%m-%d %H:%M:%S'),to_time=totime.strftime('%Y-%m-%d %H:%M:%S'))
+
+    mylogs=[]
+    for x in res:
+        for l in x.logs:        
+            mylogs.append(l)
+
+
+    result=pd.DataFrame({'dict':[i.get_contents() for i in mylogs],
+                                 'time':[datetime.datetime.fromtimestamp(i.get_time()) for i in mylogs]})
+    t2=datetime.datetime.now()
+    print(t2-t1)
+   
+    p1=re.compile('User@Host')
+
+    result['content']= result['dict'].apply(lambda x:x['content'] if len(p1.findall(x['content']))==1
+                                          and x['content'][:6]=='# Time' and len(x['content'].split("\n"))==5 else 'None')  
+    result=result[result['content']!='None']
+    result['fParkID']=result['dict'].apply(lambda x:x['__tag__:__user_defined_id__'] 
+                                            if '__tag__:__user_defined_id__' in x.keys() else -1) 
+    result=result[result['fParkID']!=-1]
+    result['fParkID']=result['fParkID'].apply(lambda x:x.split('_')[-1])
+    result['querytxt']=result['content'].apply(lambda x:x.split("\n")[2] )
+    result['sql']=result['content'].apply(lambda x:x.split("\n")[4] )
+    result['querytime']=result['querytxt'].apply(lambda x:x.split(" ")[2] )
+    result['locktime']=result['querytxt'].apply(lambda x:x.split(" ")[5] )
+    result['querytime']=result['querytime'].astype("float32")
+    result['locktime']=result['locktime'].astype("float32")
+    result['totaltime']=result['querytime']+result['locktime']
+    result['fDate']=result['time'].dt.date
+    result['alert']=result['totaltime'].apply(lambda x:1 if x>2 else 0)
+
+    week_report=result[['fDate','fParkID','alert']]
+    week_report=week_report.groupby(['fDate','fParkID']).sum().unstack(['fDate'])['alert'].fillna(0).reset_index()
+    week_report['fParkID']=week_report['fParkID'].astype('int64')
+    week_report=fPark.merge(week_report,how='left',on='fParkID').fillna(0)
+    week_report=week_report.drop(['fParkID'],axis=1)
+
+    return week_report
+
+
+
+
+
+
