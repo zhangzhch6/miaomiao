@@ -1,0 +1,75 @@
+import pandas as pd
+import numpy as np
+import matplotlib.pyplot as plt
+
+import warnings
+from docx import Document
+from docx.shared import Inches
+from docx.shared import Pt
+warnings.filterwarnings('ignore')
+pd.options.display.latex.repr = True
+
+
+
+
+def ctable(document,dataframe):
+    table=document.add_table(dataframe.shape[0]+1,dataframe.shape[1],style = 'Table Grid')
+
+    for i in range(dataframe.shape[1]):
+        table.row_cells(0)[i].width = Inches(1)
+        table.row_cells(0)[i].text=dataframe.columns[i]
+    
+    for i in range(1,dataframe.shape[0]+1):
+        for j in range(dataframe.shape[1]):
+             table.cell(i,j).width = Inches(1)
+             table.cell(i,j).text=str(dataframe.values[i-1,j])
+    
+    #table.autofit = True
+    table.style.font.name = u'等线'
+    table.style.font.size = Pt(10)
+
+
+
+
+
+#车场月运营报表
+def quest(parklist):
+   
+        plt.rcParams['font.sans-serif']=['SimHei']
+        
+        document = Document()
+        day=m.titledate()
+        document.add_heading('{0}*'.format(ali_fPark.loc[ali_fPark['fParkID']==park].to_numpy()[0,1]), 0)
+        document.add_heading('{0}年{1}月'.format(day.year,day.month),7)
+        document.add_heading('目录', 1)
+        document.add_heading("1.*", 3)
+        document.add_heading("1.1*", 5)
+
+        
+    
+        document.add_page_break()
+        document.add_heading('1.总收入', 1)
+        document.add_paragraph('**', style='Intense Quote')
+        document.add_paragraph('\n')
+        document.add_paragraph('1.1*', style='List Bullet')
+
+
+        ctable(document,a)
+        document.add_page_break()
+        document.add_paragraph('1.3*', style='List Bullet')
+        document.add_picture('.\picture\plotsum.png', width=Inches(3))
+        
+        
+        
+        document.add_heading('2.***', 1)
+        
+        if isinstance(a, pd.DataFrame) and not a.empty:
+            document.add_paragraph('*', style='Heading 9')
+            ctable(document,a)
+            document.add_paragraph('\r')
+            document.add_picture('.\\picture\\plotsum.png', width=Inches(2.5))
+        
+
+            
+        document.save('{0}*.docx'.format(ali_fPark.loc[ali_fPark['fParkID']==park].to_numpy()[0,1]))
+        print(i)
